@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>资产折旧摊销预测（发布版V1.0）</title>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: #f0f2f5; color: #333; min-height: 100vh;
+}
+.header {
+  background: linear-gradient(135deg, #009688 0%, #00796b 100%);
+  color: #fff; padding: 28px 40px; text-align: center;
+}
+.header h1 { font-size: 26px; font-weight: 600; margin-bottom: 6px; }
+.header p { font-size: 14px; opacity: 0.85; }
+.container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+.card {
+  background: #fff; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  padding: 28px; margin-bottom: 20px;
+}
+.card h2 { font-size: 18px; font-weight: 600; color: #009688; margin-bottom: 16px; }
+.upload-zone {
+  border: 2px dashed #d0d5dd; border-radius: 12px; padding: 48px 24px; text-align: center;
+  cursor: pointer; transition: all 0.2s; background: #fafbfc;
+}
+.upload-zone:hover, .upload-zone.dragover {
+  border-color: #009688; background: #e0f2f1;
+}
+.upload-zone .icon { font-size: 48px; margin-bottom: 12px; }
+.upload-zone .text { font-size: 16px; color: #666; margin-bottom: 6px; }
+.upload-zone .hint { font-size: 13px; color: #999; }
+.upload-zone input[type=file] { display: none; }
+.file-info {
+  display: none; background: #e8f5e9; border-radius: 8px; padding: 14px 20px;
+  margin-top: 16px; align-items: center; gap: 12px; flex-wrap: wrap;
+}
+.file-info .name { font-weight: 600; font-size: 15px; }
+.file-info .meta { font-size: 13px; color: #666; margin-top: 2px; }
+.file-info .badge {
+  display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 12px;
+  font-weight: 600; margin-top: 4px;
+}
+.badge-group { background: #e3f2fd; color: #1565c0; }
+.badge-single { background: #fce4ec; color: #c62828; }
+.period-row {
+  display: none; align-items: center; gap: 10px; margin-top: 12px;
+  background: #e0f2f1; border-radius: 8px; padding: 12px 16px; border: 1px solid #80cbc4;
+}
+.period-row label { font-size: 14px; font-weight: 600; color: #00695c; white-space: nowrap; }
+.period-row input {
+  width: 110px; padding: 7px 12px; border: 1.5px solid #4db6ac; border-radius: 6px;
+  font-size: 15px; text-align: center; font-family: "Consolas", "Courier New", monospace;
+  letter-spacing: 1px; color: #333; background: #fff;
+  transition: border-color 0.2s;
+}
+.period-row input:focus { outline: none; border-color: #009688; box-shadow: 0 0 0 3px rgba(0,150,136,0.15); }
+.period-row .period-hint { font-size: 12px; color: #888; }
+.period-row .period-valid { color: #2e7d32; font-size: 12px; }
+.period-row .period-invalid { color: #c62828; font-size: 12px; }
+.btn {
+  display: inline-flex; align-items: center; gap: 6px; padding: 10px 24px;
+  border: none; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-primary { background: #009688; color: #fff; }
+.btn-primary:hover { background: #00796b; }
+.btn-primary:disabled { background: #4db6ac; cursor: not-allowed; }
+.btn-outline { background: #fff; color: #009688; border: 1.5px solid #009688; }
+.btn-outline:hover { background: #e0f2f1; }
+.actions { display: flex; gap: 12px; margin-top: 16px; }
+.result-section { display: none; }
+.tab-bar {
+  display: flex; gap: 4px; border-bottom: 2px solid #e0e0e0;
+  margin-bottom: 16px; overflow-x: auto; padding-bottom: 0;
+}
+.tab {
+  padding: 10px 20px; border: none; background: none; font-size: 14px;
+  font-weight: 500; color: #666; cursor: pointer; white-space: nowrap;
+  border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s;
+}
+.tab:hover { color: #009688; }
+.tab.active { color: #009688; border-bottom-color: #009688; font-weight: 600; }
+.table-wrap { overflow-x: auto; max-height: 520px; overflow-y: auto; }
+table {
+  border-collapse: collapse; width: 100%; font-size: 13px; min-width: 900px;
+}
+th {
+  position: sticky; top: 0; background: #f5f7fa; font-weight: 600; color: #444;
+  padding: 10px 12px; text-align: center; border: 1px solid #e0e0e0; white-space: nowrap;
+  z-index: 1;
+}
+td {
+  padding: 8px 12px; text-align: center; border: 1px solid #f0f0f0; white-space: nowrap;
+}
+tr:nth-child(even) { background: #fafbfc; }
+tr:hover { background: #e0f2f1; }
+tr.row-excluded { background: #fff9c4; }
+tr.row-excluded:hover { background: #fff59d; }
+.text-left { text-align: left; }
+.number { text-align: right; font-variant-numeric: tabular-nums; }
+.tag-yes { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; background: #c8e6c9; color: #2e7d32; }
+.tag-no { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; background: #ffe0b2; color: #e65100; }
+.summary-cards {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px; margin-bottom: 20px;
+}
+.summary-card {
+  background: linear-gradient(135deg, #e0f2f1 0%, #b2dfdb 100%);
+  border-radius: 10px; padding: 18px 20px; border: 1px solid #80cbc4;
+}
+.summary-card .label { font-size: 13px; color: #666; margin-bottom: 4px; }
+.summary-card .value { font-size: 24px; font-weight: 700; color: #009688; }
+.progress-wrap { display: none; align-items: center; gap: 12px; margin-top: 16px; }
+.spinner {
+  width: 20px; height: 20px; border: 2.5px solid #e0e0e0;
+  border-top-color: #009688; border-radius: 50%; animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.empty { text-align: center; padding: 40px; color: #999; }
+.alert {
+  padding: 12px 16px; border-radius: 8px; font-size: 14px; margin-bottom: 16px;
+}
+.alert-warning { background: #fff3e0; border: 1px solid #ffe0b2; color: #e65100; }
+.alert-info { background: #e3f2fd; border: 1px solid #bbdefb; color: #0d47a1; }
+.stats-row { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
+.stat-item { font-size: 13px; color: #555; }
+.stat-item strong { color: #333; }
+.rule-box {
+  background: #f5f7fa; border-radius: 8px; padding: 16px 20px; margin-bottom: 16px;
+  border-left: 4px solid #009688; font-size: 13px; line-height: 1.8; color: #555;
+}
+.rule-box strong { color: #333; }
+.rule-updates {
+  background: #e0f2f1; border-radius: 8px; padding: 10px 16px; margin-top: 12px;
+  font-size: 12px; color: #00695c; line-height: 1.7;
+}
+.rule-updates strong { color: #004d40; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>📊 资产折旧摊销预测（发布版V1.0）</h1>
+  <p>操作如有疑问，请联系财务管理中心-邹少玉</p>
+</div>
+
+<div class="container">
+  <!-- 规则说明 -->
+  <div class="card">
+    <h2>计算规则</h2>
+    <div class="rule-box">
+      <strong>第一年折旧预测</strong> = 本年累计折旧 + 月折旧额 × min(本年剩余月份, 剩余期间)<br>
+      <strong>月折旧额</strong>：本期实提折旧额 > 0 时取本期实提折旧额；= 0 时取 <strong>(净额 − 预计净残值) ÷ 剩余期间</strong>；<strong>净额 ≤ 0 时月折旧额 = 0</strong>（避免因减值/负数产生负折旧）<br>
+      <strong>本年剩余月份</strong>：本期实提折旧额 > 0 → 12 − 期间月；= 0 → 13 − 期间月<br>
+      <strong>剩余期间 ≤ 0 且 本期实提折旧额 = 0 的资产</strong>：不参与未来月份模拟；<strong>若本年累计折旧 > 0，第一年取本年累计折旧</strong>（对齐EAS逻辑）；若本年累计折旧 = 0，所有年份均为 0<br>
+      <strong>账载所属期间</strong>：从文件名自动识别，<strong>可手动修改</strong>，格式为 YYYYMM（如 202607）<br>
+      <strong>使用权资产-房屋建筑物</strong>（科目 1611.01）：<strong>不参与折旧模拟</strong>，计算时自动过滤
+    </div>
+  </div>
+
+  <!-- 上传区域 -->
+  <div class="card">
+    <h2>① 上传固定资产清单</h2>
+    <div class="upload-zone" id="uploadZone">
+      <div class="icon">📁</div>
+      <div class="text">拖拽 Excel 文件到此处，或点击选择文件</div>
+      <div class="hint">支持 .xlsx / .xls 格式 | 文件名应包含期间（如 20260720160557）</div>
+      <input type="file" id="fileInput" accept=".xlsx,.xls">
+    </div>
+    <div class="file-info" id="fileInfo">
+      <div>
+        <div class="name" id="fileName"></div>
+        <div class="meta" id="fileMeta"></div>
+        <span class="badge" id="fileTypeBadge"></span>
+      </div>
+    </div>
+    <div class="period-row" id="periodRow">
+      <label>账载所属期间：</label>
+      <input type="text" id="periodInput" maxlength="6" placeholder="YYYYMM" autocomplete="off">
+      <span id="periodStatus"></span>
+      <span class="period-hint">从文件名自动识别，可手动修改</span>
+    </div>
+    <div class="actions" id="actions" style="display:none">
+      <button class="btn btn-primary" id="calcBtn" onclick="calculate()">🔍 开始计算折旧预测</button>
+      <button class="btn btn-outline" id="downloadBtn" onclick="downloadResult()" style="display:none">📥 下载结果 Excel（带样式）</button>
+    </div>
+    <div class="progress-wrap" id="progressWrap">
+      <div class="spinner"></div>
+      <span>正在计算中...</span>
+    </div>
+  </div>
+
+  <!-- 结果区域 -->
+  <div class="card result-section" id="resultSection">
+    <h2>② 折旧预测结果</h2>
+    <div class="summary-cards" id="summaryCards"></div>
+    <div id="statsRow" class="stats-row"></div>
+    <div class="tab-bar" id="tabBar"></div>
+    <div class="table-wrap" id="tableWrap"></div>
+  </div>
+
+  <div class="card result-section" id="summarySection">
+    <h2>③ 科目汇总</h2>
+    <div class="tab-bar" id="summaryTabBar"></div>
+    <div class="table-wrap" id="summaryTableWrap"></div>
+  </div>
+</div>
+
+<script>
+// ==================== 核心计算引擎 V6 ====================
+// V3/V4 规则：净额≤0月折旧额=0 | 剩余≤0且实提=0仅YTD>0时计入第一年 | 库存资产-设备排除 | 科目为空排除
+// V5 规则：1611.01(使用权资产-房屋建筑物)过滤 | 账载所属期间可编辑 | ExcelJS带样式导出
+// V6 新增：集团清单组织架构向下填充（合并单元格导出导致空白行，用上一个非空值填充）
+
+const YEAR_COUNT = 6;
+
+// 科目分类映射
+function classifyAccount(code) {
+  if (!code) return '其他';
+  const s = String(code).trim();
+  if (s.startsWith('1601')) return '固定资产';
+  if (s.startsWith('1801')) return '长期待摊费用';
+  if (s.startsWith('1701')) return '无形资产';
+  if (s === '1611.02' || s.startsWith('1611.02')) return '使用权资产-设备';
+  if (s === '1611.01' || s.startsWith('1611.01')) return '使用权资产-房屋建筑物';
+  if (s === '1521.01' || s.startsWith('1521.01')) return '投资性房地产';
+  if (s === '1405.02' || s.startsWith('1405.02')) return '库存资产-设备';
+  if (s.startsWith('1611')) return '使用权资产';
+  if (s.startsWith('1521')) return '投资性房地产';
+  if (s.startsWith('1405')) return '库存资产';
+  return '其他';
+}
+
+// 从文件名提取期间 YYYYMM
+function parsePeriod(filename) {
+  const m = filename.match(/(\d{4})(\d{2})(\d{2})(\d{6})/);
+  if (m) return { year: parseInt(m[1]), month: parseInt(m[2]) };
+  const m2 = filename.match(/(\d{4})(\d{2})(\d{2})/);
+  if (m2) return { year: parseInt(m2[1]), month: parseInt(m2[2]) };
+  return null;
+}
+
+// 从输入框获取期间
+function getPeriodFromInput() {
+  const val = document.getElementById('periodInput').value.trim();
+  const m = val.match(/^(\d{4})(0[1-9]|1[0-2])$/);
+  if (m) return { year: parseInt(m[1]), month: parseInt(m[2]) };
+  return null;
+}
+
+// 判断是否为集团清单（含"组织架构"列）
+function isGroupFile(headers) {
+  return headers.some(h => h && (h.includes('组织架构') || h.includes('影城')));
+}
+
+function toNum(v) { const n = parseFloat(v); return isNaN(n) ? 0 : n; }
+function toInt(v) { const n = parseInt(v); return isNaN(n) ? 0 : n; }
+
+function calcMonthlyDepr(row) {
+  const currentDepr = toNum(row['本期实提折旧额']);
+  if (currentDepr > 0) return currentDepr;
+  const netAmount = toNum(row['净额']);
+  if (netAmount <= 0) return 0;
+  const salvage = toNum(row['预计净残值']);
+  const remaining = toInt(row['剩余期间']);
+  if (remaining > 0) return Math.round(((netAmount - salvage) / remaining) * 100) / 100;
+  return 0;
+}
+
+function calcRemainingMonths(periodMonth, currentDeprHasValue) {
+  if (currentDeprHasValue) return Math.max(0, 12 - periodMonth);
+  return Math.max(0, 13 - periodMonth);
+}
+
+function computeDepreciation(rows, periodMonth, startYear) {
+  const results = [];
+  const yearLabels = [];
+  for (let i = 0; i < YEAR_COUNT; i++) yearLabels.push(`${startYear + i}年预测折旧`);
+
+  for (const row of rows) {
+    const remaining = toInt(row['剩余期间']);
+    const ytd = toNum(row['本年累计折旧']);
+    const currentDepr = toNum(row['本期实提折旧额']);
+    const result = { ...row };
+
+    if (remaining <= 0 && currentDepr === 0) {
+      result['月折旧额(账面)'] = 0;
+      result['本年剩余月份'] = 0;
+      result['是否参与模拟'] = '否';
+      if (ytd > 0) {
+        result[yearLabels[0]] = Math.round(ytd * 100) / 100;
+      } else {
+        result[yearLabels[0]] = 0;
+      }
+      for (let i = 1; i < YEAR_COUNT; i++) {
+        result[yearLabels[i]] = 0;
+      }
+    } else if (remaining <= 0) {
+      result['月折旧额(账面)'] = currentDepr;
+      result['本年剩余月份'] = 0;
+      result['是否参与模拟'] = '否';
+      result[yearLabels[0]] = Math.round(ytd * 100) / 100;
+      for (let i = 1; i < YEAR_COUNT; i++) {
+        result[yearLabels[i]] = 0;
+      }
+    } else {
+      const hasCurrDepr = currentDepr > 0;
+      const monthlyDepr = calcMonthlyDepr(row);
+      const remainMonths = calcRemainingMonths(periodMonth, hasCurrDepr);
+
+      result['月折旧额(账面)'] = monthlyDepr;
+      result['本年剩余月份'] = remainMonths;
+      result['是否参与模拟'] = '是';
+
+      let remainingAfter = remaining;
+      const year1UseMonths = Math.min(remainMonths, remainingAfter);
+      const year1Val = ytd + monthlyDepr * year1UseMonths;
+      result[yearLabels[0]] = Math.round(year1Val * 100) / 100;
+      remainingAfter -= year1UseMonths;
+
+      for (let i = 1; i < YEAR_COUNT; i++) {
+        if (remainingAfter <= 0) {
+          result[yearLabels[i]] = 0;
+        } else {
+          const useMonths = Math.min(12, remainingAfter);
+          result[yearLabels[i]] = Math.round((monthlyDepr * useMonths) * 100) / 100;
+          remainingAfter -= useMonths;
+        }
+      }
+    }
+    results.push(result);
+  }
+  return { results, yearLabels };
+}
+
+// ==================== 表格生成 ====================
+
+function buildDetailTable(data, yearLabels, isGroup) {
+  const cols = ['资产编码', '资产名称', '类别', '固定资产科目', '大类科目', '是否参与模拟',
+    '资产原值', '净值', '净额', '预计净残值', '预计使用期间数', '已折旧期间数',
+    '剩余期间', '本期实提折旧额', '本年累计折旧', '月折旧额(账面)', '本年剩余月份'];
+  if (isGroup) cols.push('组织架构');
+  cols.push(...yearLabels);
+  return { cols, rows: data };
+}
+
+function buildCategorySummary(data, yearLabels, field) {
+  const map = {};
+  for (const row of data) {
+    const key = row[field] || '未分类';
+    if (!map[key]) map[key] = {};
+    for (const yl of yearLabels) {
+      map[key][yl] = (map[key][yl] || 0) + (row[yl] || 0);
+    }
+  }
+  const rows = Object.entries(map).map(([name, vals]) => {
+    const r = { '科目': name };
+    for (const yl of yearLabels) r[yl] = Math.round(vals[yl] * 100) / 100;
+    return r;
+  });
+  rows.sort((a, b) => {
+    const aTotal = yearLabels.reduce((s, yl) => s + (a[yl] || 0), 0);
+    const bTotal = yearLabels.reduce((s, yl) => s + (b[yl] || 0), 0);
+    return bTotal - aTotal;
+  });
+  const cols = ['科目', ...yearLabels];
+  const totalRow = { '科目': '合计' };
+  for (const yl of yearLabels) {
+    totalRow[yl] = Math.round(rows.reduce((s, r) => s + (r[yl] || 0), 0) * 100) / 100;
+  }
+  rows.push(totalRow);
+  return { cols, rows };
+}
+
+function buildOrgSummary(data, yearLabels) {
+  const map = {};
+  for (const row of data) {
+    const org = row['组织架构'] || '未分配';
+    const cat = row['大类科目'] || '未分类';
+    const key = `${org}|||${cat}`;
+    if (!map[key]) { map[key] = { org, cat }; }
+    for (const yl of yearLabels) {
+      map[key][yl] = (map[key][yl] || 0) + (row[yl] || 0);
+    }
+  }
+  const rows = Object.values(map).map(r => ({
+    '组织架构': r.org,
+    '大类科目': r.cat,
+    ...Object.fromEntries(yearLabels.map(yl => [yl, Math.round((r[yl] || 0) * 100) / 100]))
+  }));
+  rows.sort((a, b) => a['组织架构'].localeCompare(b['组织架构']) || a['大类科目'].localeCompare(b['大类科目']));
+  const cols = ['组织架构', '大类科目', ...yearLabels];
+  return { cols, rows };
+}
+
+// ==================== UI ====================
+
+let parsedData = null;
+let parsedFilename = '';
+let isGroup = false;
+let detailData = null;
+let yearLabels = null;
+let wbBuffer = null;  // ExcelJS写的二进制buffer，替代SheetJS的wbResult
+let usedPeriodMonth = null;
+let usedStartYear = null;
+
+const uploadZone = document.getElementById('uploadZone');
+const fileInput = document.getElementById('fileInput');
+const fileInfo = document.getElementById('fileInfo');
+const periodRow = document.getElementById('periodRow');
+const periodInput = document.getElementById('periodInput');
+const periodStatus = document.getElementById('periodStatus');
+const actions = document.getElementById('actions');
+const calcBtn = document.getElementById('calcBtn');
+const downloadBtn = document.getElementById('downloadBtn');
+const progressWrap = document.getElementById('progressWrap');
+const resultSection = document.getElementById('resultSection');
+const summarySection = document.getElementById('summarySection');
+
+uploadZone.addEventListener('click', () => fileInput.click());
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadZone.classList.remove('dragover');
+  handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+
+// 账载所属期间输入框实时校验
+periodInput.addEventListener('input', function() {
+  validatePeriodInput();
+});
+
+function validatePeriodInput() {
+  const val = periodInput.value.trim();
+  if (val.length === 0) {
+    periodStatus.textContent = '';
+    periodStatus.className = '';
+    return false;
+  }
+  if (val.length < 6) {
+    periodStatus.textContent = '⏳ 请输入6位数字';
+    periodStatus.className = 'period-hint';
+    return false;
+  }
+  const m = val.match(/^(\d{4})(0[1-9]|1[0-2])$/);
+  if (m) {
+    periodStatus.textContent = `✓ ${m[1]}年${m[2]}月`;
+    periodStatus.className = 'period-valid';
+    return true;
+  } else {
+    periodStatus.textContent = '✗ 格式错误（如202607）';
+    periodStatus.className = 'period-invalid';
+    return false;
+  }
+}
+
+function handleFile(file) {
+  if (!file) return;
+  parsedFilename = file.name;
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      const sheetName = wb.SheetNames[0];
+      const sheet = wb.Sheets[sheetName];
+      const json = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+      if (json.length === 0) { alert('Excel 文件为空或格式不正确'); return; }
+
+      // 校验必要列
+      const headers = Object.keys(json[0]);
+      const requiredCols = ['本年累计折旧', '本期实提折旧额', '固定资产科目'];
+      const missing = requiredCols.filter(rc => !headers.some(h => h.includes(rc)));
+      if (missing.length > 0) {
+        alert('❌ 清单表头缺少必要列，无法进行折旧预测！\n\n缺少以下列：\n  • ' + missing.join('\n  • ') + '\n\n请确保上传的 Excel 包含这些列后再试。');
+        return;
+      }
+
+      parsedData = json;
+      isGroup = isGroupFile(Object.keys(json[0]));
+
+      // 从文件名自动识别期间并填入输入框
+      const period = parsePeriod(file.name);
+      if (!period) {
+        alert('❌ 无法从文件名中提取期间信息！\n\n文件名应包含 YYYYMMDD 格式的日期，例如：\n集团固定资产清单20260717173117.xlsx\n\n您也可以在上传后手动输入账载所属期间。');
+        periodInput.value = '';
+        periodStatus.textContent = '';
+        periodStatus.className = '';
+      } else {
+        const periodStr = String(period.year) + String(period.month).padStart(2, '0');
+        periodInput.value = periodStr;
+        validatePeriodInput();
+      }
+
+      document.getElementById('fileName').textContent = file.name;
+      document.getElementById('fileMeta').textContent =
+        `共 ${json.length} 条记录` + (period ? ` | 自动识别期间: ${period.year}年${String(period.month).padStart(2,'0')}月` : '');
+      const badge = document.getElementById('fileTypeBadge');
+      badge.textContent = isGroup ? '集团清单（含组织架构）' : '单独组织清单';
+      badge.className = 'badge ' + (isGroup ? 'badge-group' : 'badge-single');
+
+      fileInfo.style.display = 'flex';
+      periodRow.style.display = 'flex';
+      actions.style.display = 'flex';
+      downloadBtn.style.display = 'none';
+      resultSection.style.display = 'none';
+      summarySection.style.display = 'none';
+    } catch (err) {
+      alert('读取文件失败: ' + err.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function calculate() {
+  if (!parsedData) return;
+
+  // 校验账载所属期间
+  const period = getPeriodFromInput();
+  if (!period) {
+    alert('❌ 请输入正确的账载所属期间（格式：YYYYMM，如 202607）');
+    periodInput.focus();
+    return;
+  }
+  const periodMonth = period.month;
+  const startYear = period.year;
+  usedPeriodMonth = periodMonth;
+  usedStartYear = startYear;
+
+  calcBtn.disabled = true;
+  progressWrap.style.display = 'flex';
+  downloadBtn.style.display = 'none';
+  resultSection.style.display = 'none';
+  summarySection.style.display = 'none';
+
+  setTimeout(() => {
+    try {
+      const headers = Object.keys(parsedData[0]);
+      const codeKey = headers.find(h => h.includes('固定资产编码') || h.includes('资产编码')) || '固定资产编码';
+      const nameKey = headers.find(h => h.includes('固定资产名称') || h.includes('资产名称')) || '固定资产名称';
+      const catKey = headers.find(h => h.includes('固定资产类别') || h.includes('类别')) || '固定资产类别';
+      const acctKey = headers.find(h => h.includes('固定资产科目')) || '固定资产科目';
+      const orgKey = isGroup ? (headers.find(h => h.includes('组织架构')) || '组织架构') : null;
+      const origValKey = headers.find(h => h.includes('资产原值') || h.includes('原值')) || '资产原值';
+      const netValKey = headers.find(h => h === '净值' || h.includes('净值')) || '净值';
+      const netAmountKey = headers.find(h => h === '净额' || h.includes('净额')) || '净额';
+      const salvageKey = headers.find(h => h.includes('预计净残值') || h.includes('残值')) || '预计净残值';
+      const estPeriodsKey = headers.find(h => h.includes('预计使用期间数') || h.includes('预计使用期间')) || '预计使用期间数';
+      const deprPeriodsKey = headers.find(h => h.includes('已折旧期间数') || h.includes('已折旧期间')) || '已折旧期间数';
+      const currDeprKey = headers.find(h => h.includes('本期实提折旧额') || h.includes('本期实提')) || '本期实提折旧额';
+      const ytdKey = headers.find(h => h.includes('本年累计折旧')) || '本年累计折旧';
+
+      let stockExcludedCount = 0;     // 库存资产-设备
+      let buildingsExcludedCount = 0; // 使用权资产-房屋建筑物
+      let emptyExcludedCount = 0;     // 科目为空
+      let orgFilledCount = 0;         // V6: 组织架构向下填充计数
+      const rows = [];
+
+      // V6: 集团清单组织架构向下填充（合并单元格导出导致空白行，用上一个非空值填充）
+      if (isGroup && orgKey) {
+        let lastOrg = '';
+        for (const r of parsedData) {
+          const orgVal = r[orgKey] ? String(r[orgKey]).trim() : '';
+          if (orgVal) {
+            lastOrg = orgVal;
+          } else if (lastOrg) {
+            r[orgKey] = lastOrg;
+            orgFilledCount++;
+          }
+        }
+      }
+
+      for (const r of parsedData) {
+        const bigCat = classifyAccount(r[acctKey]);
+
+        // 库存资产-设备(1405.02)不参与折旧模拟
+        if (bigCat === '库存资产-设备') {
+          stockExcludedCount++;
+          continue;
+        }
+        // V5: 使用权资产-房屋建筑物(1611.01)不参与折旧模拟
+        if (bigCat === '使用权资产-房屋建筑物') {
+          buildingsExcludedCount++;
+          continue;
+        }
+        // 固定资产科目为空不参与
+        if (!r[acctKey] || String(r[acctKey]).trim() === '') {
+          emptyExcludedCount++;
+          continue;
+        }
+
+        const est = toInt(r[estPeriodsKey]);
+        const depr = toInt(r[deprPeriodsKey]);
+        const remaining = est - depr;
+        const obj = {
+          '资产编码': r[codeKey] || '',
+          '资产名称': r[nameKey] || '',
+          '类别': r[catKey] || '',
+          '固定资产科目': r[acctKey] || '',
+          '大类科目': bigCat,
+          '资产原值': toNum(r[origValKey]),
+          '净值': toNum(r[netValKey]),
+          '净额': toNum(r[netAmountKey]),
+          '预计净残值': toNum(r[salvageKey]),
+          '预计使用期间数': est,
+          '已折旧期间数': depr,
+          '剩余期间': remaining,
+          '本期实提折旧额': toNum(r[currDeprKey]),
+          '本年累计折旧': toNum(r[ytdKey]),
+        };
+        if (isGroup && orgKey) obj['组织架构'] = r[orgKey] || '';
+        rows.push(obj);
+      }
+
+      const { results, yearLabels: yl } = computeDepreciation(rows, periodMonth, startYear);
+      detailData = results;
+      yearLabels = yl;
+
+      const catSummary = buildCategorySummary(results, yearLabels, '大类科目');
+      const acctSummary = buildCategorySummary(results, yearLabels, '固定资产科目');
+      const orgSummary = isGroup ? buildOrgSummary(results, yearLabels) : null;
+
+      // Stats
+      const totalParticipating = results.filter(r => r['是否参与模拟'] === '是').length;
+      const totalExcluded = results.filter(r => r['是否参与模拟'] === '否').length;
+      const totalY1 = results.reduce((s, r) => s + (r[yearLabels[0]] || 0), 0);
+      const totalYtd = results.reduce((s, r) => s + (r['本年累计折旧'] || 0), 0);
+
+      let statsHtml = `
+        <span class="stat-item">📋 有效记录: <strong>${results.length}</strong> 条</span>
+        <span class="stat-item">✅ 参与模拟: <strong>${totalParticipating}</strong> 条</span>
+        <span class="stat-item">⚠️ 已折旧完毕(仅计YTD): <strong>${totalExcluded}</strong> 条</span>`;
+      if (stockExcludedCount > 0) statsHtml += `
+        <span class="stat-item">🚫 库存资产-设备(已排除): <strong>${stockExcludedCount}</strong> 条</span>`;
+      if (buildingsExcludedCount > 0) statsHtml += `
+        <span class="stat-item">🏠 使用权资产-房屋建筑物(已排除): <strong>${buildingsExcludedCount}</strong> 条</span>`;
+      if (emptyExcludedCount > 0) statsHtml += `
+        <span class="stat-item">❓ 科目为空(已排除): <strong>${emptyExcludedCount}</strong> 条</span>`;
+      if (isGroup && orgFilledCount > 0) statsHtml += `
+        <span class="stat-item">🔄 组织架构已向下填充: <strong>${orgFilledCount}</strong> 条</span>`;
+      statsHtml += `
+        <span class="stat-item">💰 本年累计折旧合计: <strong>¥${totalYtd.toLocaleString('zh-CN', {minimumFractionDigits:2})}</strong></span>
+        <span class="stat-item">📊 ${yearLabels[0]}: <strong>¥${totalY1.toLocaleString('zh-CN', {minimumFractionDigits:2})}</strong></span>`;
+
+      document.getElementById('statsRow').innerHTML = statsHtml;
+
+      // Summary cards
+      const cardsHtml = yearLabels.map(yl => {
+        const total = results.reduce((s, r) => s + (r[yl] || 0), 0);
+        return `<div class="summary-card"><div class="label">${yl}</div><div class="value">¥${total.toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2})}</div></div>`;
+      }).join('');
+      document.getElementById('summaryCards').innerHTML = cardsHtml;
+
+      // Detail tab
+      const detailTable = buildDetailTable(results, yearLabels, isGroup);
+      renderTable('tableWrap', detailTable);
+      renderTabs('tabBar', [{ name: '折旧预测明细', active: true }], 0, () => {
+        renderTable('tableWrap', detailTable);
+      });
+
+      // Summary tabs
+      const summaryTabs = [
+        { name: '按大类科目汇总' },
+        { name: '按明细科目汇总' },
+      ];
+      if (isGroup) summaryTabs.push({ name: '按组织架构汇总' });
+      summaryTabs[0].active = true;
+
+      renderTabs('summaryTabBar', summaryTabs, 0, (idx) => {
+        if (idx === 0) renderTable('summaryTableWrap', catSummary);
+        else if (idx === 1) renderTable('summaryTableWrap', acctSummary);
+        else if (idx === 2 && orgSummary) renderTable('summaryTableWrap', orgSummary);
+      });
+      renderTable('summaryTableWrap', catSummary);
+
+      // Build ExcelJS workbook for styled download (async, pre-build buffer)
+      buildStyledWorkbook(detailTable, catSummary, acctSummary, orgSummary).then(buf => {
+        wbBuffer = buf;
+        downloadBtn.style.display = 'inline-flex';
+      });
+
+      resultSection.style.display = 'block';
+      summarySection.style.display = 'block';
+    } catch (err) {
+      alert('计算失败: ' + err.message + '\n' + err.stack);
+    } finally {
+      calcBtn.disabled = false;
+      progressWrap.style.display = 'none';
+    }
+  }, 100);
+}
+
+// ==================== ExcelJS 带样式导出 ====================
+
+// 判断哪些列是数字，以及数字列中哪些是整数
+function getNumColInfo(cols) {
+  const decimalCols = new Set();   // #,##0.00
+  const intCols = new Set();      // #,##0
+
+  for (const col of cols) {
+    if (col.includes('折旧') || col.includes('原值') || col.includes('净值') || col.includes('净额') || col.includes('残值')) {
+      decimalCols.add(col);
+    } else if (col.includes('期间数') || col.includes('期间') || col.includes('剩余月份')) {
+      intCols.add(col);
+    }
+  }
+  return { decimalCols, intCols };
+}
+
+function addStyledSheet(workbook, name, cols, rows) {
+  const sheet = workbook.addWorksheet(name);
+  const { decimalCols, intCols } = getNumColInfo(cols);
+
+  // 写表头
+  const headerRow = sheet.addRow(cols);
+  headerRow.eachCell(cell => {
+    cell.font = { name: '宋体', size: 10, bold: true };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F7FA' } };
+    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: false };
+    cell.border = {
+      top: { style: 'thin' },
+      left: { style: 'thin' },
+      bottom: { style: 'thin' },
+      right: { style: 'thin' }
+    };
+  });
+
+  // 写数据行
+  for (const row of rows) {
+    const vals = cols.map(c => {
+      const v = row[c];
+      return (v !== undefined && v !== null) ? v : '';
+    });
+    const dataRow = sheet.addRow(vals);
+    dataRow.eachCell((cell, colNum) => {
+      const col = cols[colNum - 1];
+      cell.font = { name: '宋体', size: 10 };
+      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: false };
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' }
+      };
+      if (decimalCols.has(col)) {
+        cell.numFmt = '#,##0.00';
+      } else if (intCols.has(col)) {
+        cell.numFmt = '#,##0';
+      }
+    });
+  }
+
+  // 冻结首行
+  sheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+  // 自适应列宽
+  sheet.columns = cols.map(col => {
+    const maxLen = Math.max(
+      col.length,
+      ...rows.slice(0, 200).map(r => {
+        const v = r[col];
+        if (v === undefined || v === null) return 0;
+        if (typeof v === 'number') return String(Math.round(v)).length + 4;
+        return String(v).length;
+      })
+    );
+    return { width: Math.min(Math.max(maxLen + 2, 8), 30) };
+  });
+}
+
+async function buildStyledWorkbook(detailTable, catSummary, acctSummary, orgSummary) {
+  const workbook = new ExcelJS.Workbook();
+
+  // 折旧预测明细
+  const detailCols = detailTable.cols;
+  const detailRows = detailTable.rows.map(r => {
+    const obj = {};
+    detailCols.forEach(c => obj[c] = r[c] !== undefined ? r[c] : '');
+    return obj;
+  });
+  addStyledSheet(workbook, '折旧预测明细', detailCols, detailRows);
+
+  // 按大类科目汇总
+  addStyledSheet(workbook, '按大类科目汇总', catSummary.cols, catSummary.rows);
+
+  // 按明细科目汇总
+  addStyledSheet(workbook, '按明细科目汇总', acctSummary.cols, acctSummary.rows);
+
+  // 按组织架构汇总（集团清单才有）
+  if (orgSummary) {
+    addStyledSheet(workbook, '按组织架构汇总', orgSummary.cols, orgSummary.rows);
+  }
+
+  return workbook.xlsx.writeBuffer();
+}
+
+function renderTabs(containerId, tabs, activeIdx, onClick) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = tabs.map((t, i) =>
+    `<button class="tab${i === activeIdx ? ' active' : ''}" data-idx="${i}">${t.name}</button>`
+  ).join('');
+  container.querySelectorAll('.tab').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const idx = parseInt(this.dataset.idx);
+      container.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+      this.classList.add('active');
+      onClick(idx);
+    });
+  });
+}
+
+function renderTable(containerId, { cols, rows }) {
+  const container = document.getElementById(containerId);
+  let html = '<table><thead><tr>';
+  for (const col of cols) {
+    html += `<th>${col}</th>`;
+  }
+  html += '</tr></thead><tbody>';
+
+  const numCols = new Set(cols.filter(c => c.includes('折旧') || c.includes('原值') || c.includes('净值') || c.includes('净额') || c.includes('残值')));
+
+  for (const row of rows) {
+    const isExcluded = row['是否参与模拟'] === '否';
+    html += `<tr${isExcluded ? ' class="row-excluded"' : ''}>`;
+    for (let i = 0; i < cols.length; i++) {
+      const col = cols[i];
+      let val = row[col] !== undefined && row[col] !== null ? row[col] : '';
+      const isNum = numCols.has(col);
+      const isTextLeft = col.includes('名称') || col.includes('科目') || col.includes('组织架构') || col.includes('编码');
+      const cls = isNum ? 'number' : (isTextLeft ? 'text-left' : '');
+
+      if (col === '是否参与模拟') {
+        if (val === '是') {
+          val = '<span class="tag-yes">是</span>';
+        } else if (val === '否') {
+          val = '<span class="tag-no">否(仅YTD)</span>';
+        }
+        html += `<td>${val}</td>`;
+        continue;
+      }
+
+      const display = isNum && typeof val === 'number' ? val.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : val;
+      html += `<td class="${cls}">${display}</td>`;
+    }
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+
+async function downloadResult() {
+  if (!wbBuffer) {
+    alert('请先完成计算再下载');
+    return;
+  }
+  const baseName = parsedFilename.replace(/\.(xlsx|xls)$/i, '');
+  const outName = baseName + '_折旧预测.xlsx';
+
+  const blob = new Blob([wbBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = outName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+</script>
+</body>
+</html>
